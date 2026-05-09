@@ -1092,8 +1092,8 @@ dps_results: {
 dps_results: {
  key: "TestDestruction-AllItems-VoidStarTalisman-30449"
  value: {
-  dps: 1881.72962
-  tps: 1643.23104
+  dps: 1927.2267
+  tps: 1681.55514
  }
 }
 dps_results: {

@@ -1092,8 +1092,8 @@ dps_results: {
 dps_results: {
  key: "TestAffliction-AllItems-VoidStarTalisman-30449"
  value: {
-  dps: 1988.23074
-  tps: 1229.57575
+  dps: 1995.20835
+  tps: 1243.899
  }
 }
 dps_results: {
