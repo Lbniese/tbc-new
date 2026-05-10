@@ -78,8 +78,8 @@ const statGroups = new Map<string, Array<DisplayStat>>([
 		[
 			{ stat: UnitStat.fromStat(Stat.StatArmor) },
 			{ stat: UnitStat.fromStat(Stat.StatBonusArmor) },
-			{ stat: UnitStat.fromStat(Stat.StatDefenseRating) },
 			{ stat: UnitStat.fromStat(Stat.StatResilienceRating) },
+			{ stat: UnitStat.fromStat(Stat.StatDefenseRating) },
 			{ stat: UnitStat.fromPseudoStat(PseudoStat.PseudoStatDodgePercent) },
 			{ stat: UnitStat.fromPseudoStat(PseudoStat.PseudoStatParryPercent) },
 			{ stat: UnitStat.fromPseudoStat(PseudoStat.PseudoStatBlockPercent) },
@@ -460,10 +460,12 @@ export class CharacterStats extends Component {
 		let displayPrefix = '';
 		let displaySuffix = i18n.t('sidebar.character_stats.percent_suffix');
 
-		if (unitStat.equalsStat(Stat.StatDefenseRating) && includeBase) {
+		if (unitStat.equalsStat(Stat.StatDefenseRating)) {
 			displaySuffix = '';
 			percentDecimals = 0;
-			derivedPercentOrPointsValue! += this.player.getBaseDefense();
+			if (includeBase) {
+				derivedPercentOrPointsValue! += this.player.getBaseDefense();
+			}
 		} else if (rootStat === Stat.StatMeleeHitRating && includeBase && this.hasRacialHitBonus) {
 			// Remove the rating display and only show %
 			if (rootRatingValue !== null && rootRatingValue > 0) {
