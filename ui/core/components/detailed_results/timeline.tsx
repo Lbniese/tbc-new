@@ -15,6 +15,7 @@ import { TypedEvent } from '../../typed_event';
 import { bucket, distinct, fragmentToString, maxIndex, stringComparator } from '../../utils';
 import { actionColors } from './color_settings';
 import i18n from '../../../i18n/config';
+import { BooleanPicker } from '../pickers/boolean_picker';
 import { ResultComponent, ResultComponentConfig, SimResultData } from './result_component';
 import { APLActionItemSwap_SwapSet } from '../../proto/apl';
 
@@ -38,7 +39,8 @@ export class Timeline extends ResultComponent {
 	private rotationTimelineTimeRulerElem: HTMLCanvasElement | null = null;
 	private readonly rotationHiddenIdsContainer: HTMLElement;
 	private readonly chartPicker: HTMLSelectElement;
-	private readonly showGcdToggle: HTMLInputElement;
+	private showGcd = false;
+	private readonly showGcdChangeEmitter = new TypedEvent<void>();
 
 	private prevResultData: SimResultData | null;
 	private resultData: SimResultData | null;
@@ -66,6 +68,7 @@ export class Timeline extends ResultComponent {
 		this.hiddenIds = [];
 		this.hiddenIdsChangeEmitter = new TypedEvent<void>();
 
+		const showGcdContainerRef = ref<HTMLDivElement>();
 		this.rootElem.appendChild(
 			<div className="timeline-disclaimer">
 				<div className="d-flex flex-column">
@@ -76,10 +79,7 @@ export class Timeline extends ResultComponent {
 					<p>{i18n.t('results_tab.details.timeline.note')}</p>
 				</div>
 				<div className="timeline-controls">
-					<label className="timeline-show-gcd form-check m-0">
-						<input className="form-check-input" type="checkbox" />
-						<span className="form-check-label">{i18n.t('results_tab.details.timeline.show_gcd')}</span>
-					</label>
+					<div className="timeline-show-gcd" ref={showGcdContainerRef} />
 					<select className="timeline-chart-picker form-select">
 						<option className="rotation-option" value="rotation">
 							{i18n.t('results_tab.details.timeline.chart_types.rotation')}
@@ -147,12 +147,18 @@ export class Timeline extends ResultComponent {
 		this.rotationTimeline = this.rootElem.querySelector('.rotation-timeline')!;
 		this.rotationHiddenIdsContainer = this.rootElem.querySelector('.rotation-hidden-ids')!;
 
-		this.showGcdToggle = this.rootElem.querySelector('.timeline-show-gcd input')!;
-		const syncShowGcd = () => {
-			this.rotationPlotElem.classList.toggle('show-gcd', this.showGcdToggle.checked);
-		};
-		this.showGcdToggle.addEventListener('change', syncShowGcd);
-		syncShowGcd();
+		new BooleanPicker<null>(showGcdContainerRef.value!, null, {
+			id: 'timeline-show-gcd',
+			label: i18n.t('results_tab.details.timeline.show_gcd'),
+			inline: true,
+			changedEvent: () => this.showGcdChangeEmitter,
+			getValue: () => this.showGcd,
+			setValue: (eventID, _, newValue) => {
+				this.showGcd = newValue;
+				this.rotationPlotElem.classList.toggle('show-gcd', newValue);
+				this.showGcdChangeEmitter.emit(eventID);
+			},
+		});
 
 		let isMouseDown = false;
 		let startX = 0;

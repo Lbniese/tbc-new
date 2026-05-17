@@ -73,7 +73,7 @@
 		margin-left: auto;
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
+		gap: var(--spacer-3);
 	}
 
 	.timeline-chart-picker {
@@ -81,19 +81,13 @@
 	}
 
 	.timeline-show-gcd {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		cursor: pointer;
-		white-space: nowrap;
+		.boolean-picker-root {
+			width: unset;
+			white-space: nowrap;
 
-		.form-check-input {
-			margin: 0;
-			float: none;
-		}
-
-		.form-check-label {
-			margin: 0;
+			label {
+				margin-left: var(--spacer-2);
+			}
 		}
 	}
 }
