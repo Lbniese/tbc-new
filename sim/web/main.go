@@ -26,6 +26,7 @@ import (
 	proto "github.com/wowsims/tbc/sim/core/proto"
 	"github.com/wowsims/tbc/sim/core/simsignals"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	googleProto "google.golang.org/protobuf/proto"
 )
 
@@ -294,6 +295,8 @@ func (s *server) runServer(useFS bool, host string, launchBrowser bool, simName 
 	for route := range handlers {
 		http.Handle(route, corsMiddleware(http.HandlerFunc(handleAPI)))
 	}
+	http.Handle("/api/json/defaultProfile", corsMiddleware(http.HandlerFunc(handleDefaultProfileJSONAPI)))
+	http.Handle("/api/json/individualSim", corsMiddleware(http.HandlerFunc(handleIndividualSimJSONAPI)))
 
 	http.HandleFunc("/version", func(resp http.ResponseWriter, req *http.Request) {
 		msg := fmt.Sprintf(`{"version": "%s", "outdated": %d}`, Version, outdated)
@@ -457,4 +460,170 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Add("Content-Type", "application/x-protobuf")
 	w.Write(outbytes)
+}
+
+type individualSimJSONRequest struct {
+	Settings   json.RawMessage `json:"settings"`
+	Iterations int32           `json:"iterations,omitempty"`
+	RandomSeed int64           `json:"randomSeed,omitempty"`
+}
+
+type individualSimJSONResponse struct {
+	OK                  bool    `json:"ok"`
+	Error               string  `json:"error,omitempty"`
+	IterationsDone      int32   `json:"iterationsDone"`
+	RaidDPSAvg          float64 `json:"raidDpsAvg"`
+	RaidDPSStdev        float64 `json:"raidDpsStdev"`
+	RaidDPSMin          float64 `json:"raidDpsMin"`
+	RaidDPSMax          float64 `json:"raidDpsMax"`
+	PlayerDPSAvg        float64 `json:"playerDpsAvg"`
+	PlayerDPSStdev      float64 `json:"playerDpsStdev"`
+	PlayerDPSMin        float64 `json:"playerDpsMin"`
+	PlayerDPSMax        float64 `json:"playerDpsMax"`
+	AvgIterationSeconds float64 `json:"avgIterationSeconds"`
+}
+
+func handleIndividualSimJSONAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSONAPIError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+
+	var req individualSimJSONRequest
+	settingsJSON := body
+	if err := json.Unmarshal(body, &req); err == nil && len(req.Settings) > 0 {
+		settingsJSON = req.Settings
+	}
+
+	settings := &proto.IndividualSimSettings{}
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(settingsJSON, settings); err != nil {
+		writeJSONAPIError(w, http.StatusBadRequest, "failed to parse settings: "+err.Error())
+		return
+	}
+
+	raidSimRequest, err := raidSimRequestFromIndividualSettings(settings, req.Iterations, req.RandomSeed)
+	if err != nil {
+		writeJSONAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	result := core.RunRaidSimConcurrent(raidSimRequest)
+	resp := compactIndividualSimResult(result)
+	status := http.StatusOK
+	if !resp.OK {
+		status = http.StatusUnprocessableEntity
+	}
+	writeJSONAPI(w, status, resp)
+}
+
+func raidSimRequestFromIndividualSettings(settings *proto.IndividualSimSettings, iterationsOverride int32, randomSeedOverride int64) (*proto.RaidSimRequest, error) {
+	if settings == nil {
+		return nil, fmt.Errorf("settings is required")
+	}
+	if settings.Player == nil {
+		return nil, fmt.Errorf("settings.player is required")
+	}
+	if settings.Encounter == nil || len(settings.Encounter.Targets) == 0 {
+		return nil, fmt.Errorf("settings.encounter with at least one target is required")
+	}
+
+	iterations := iterationsOverride
+	if iterations <= 0 && settings.Settings != nil {
+		iterations = settings.Settings.Iterations
+	}
+	if iterations <= 0 {
+		iterations = 1000
+	}
+
+	randomSeed := randomSeedOverride
+	if randomSeed == 0 && settings.Settings != nil {
+		randomSeed = settings.Settings.FixedRngSeed
+	}
+	if randomSeed == 0 {
+		randomSeed = time.Now().UnixNano()
+	}
+
+	partyBuffs := settings.PartyBuffs
+	if partyBuffs == nil {
+		partyBuffs = &proto.PartyBuffs{}
+	}
+	raidBuffs := settings.RaidBuffs
+	if raidBuffs == nil {
+		raidBuffs = &proto.RaidBuffs{}
+	}
+	debuffs := settings.Debuffs
+	if debuffs == nil {
+		debuffs = &proto.Debuffs{}
+	}
+
+	return &proto.RaidSimRequest{
+		Raid: &proto.Raid{
+			Parties: []*proto.Party{
+				{
+					Players: []*proto.Player{settings.Player},
+					Buffs:   partyBuffs,
+				},
+			},
+			Buffs:         raidBuffs,
+			Debuffs:       debuffs,
+			Tanks:         settings.Tanks,
+			TargetDummies: settings.TargetDummies,
+		},
+		Encounter: settings.Encounter,
+		SimOptions: &proto.SimOptions{
+			Iterations:          iterations,
+			RandomSeed:          randomSeed,
+			DebugFirstIteration: true,
+		},
+		Type: proto.SimType_SimTypeIndividual,
+	}, nil
+}
+
+func compactIndividualSimResult(result *proto.RaidSimResult) individualSimJSONResponse {
+	if result == nil {
+		return individualSimJSONResponse{OK: false, Error: "sim returned no result"}
+	}
+	resp := individualSimJSONResponse{
+		OK:                  result.Error == nil,
+		IterationsDone:      result.IterationsDone,
+		AvgIterationSeconds: result.AvgIterationDuration,
+	}
+	if result.Error != nil {
+		resp.Error = result.Error.Message
+	}
+	if result.RaidMetrics != nil && result.RaidMetrics.Dps != nil {
+		resp.RaidDPSAvg = result.RaidMetrics.Dps.Avg
+		resp.RaidDPSStdev = result.RaidMetrics.Dps.Stdev
+		resp.RaidDPSMin = result.RaidMetrics.Dps.Min
+		resp.RaidDPSMax = result.RaidMetrics.Dps.Max
+	}
+	if result.RaidMetrics != nil &&
+		len(result.RaidMetrics.Parties) > 0 &&
+		len(result.RaidMetrics.Parties[0].Players) > 0 &&
+		result.RaidMetrics.Parties[0].Players[0].Dps != nil {
+		playerDPS := result.RaidMetrics.Parties[0].Players[0].Dps
+		resp.PlayerDPSAvg = playerDPS.Avg
+		resp.PlayerDPSStdev = playerDPS.Stdev
+		resp.PlayerDPSMin = playerDPS.Min
+		resp.PlayerDPSMax = playerDPS.Max
+	}
+	return resp
+}
+
+func writeJSONAPIError(w http.ResponseWriter, status int, msg string) {
+	writeJSONAPI(w, status, individualSimJSONResponse{OK: false, Error: msg})
+}
+
+func writeJSONAPI(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		log.Printf("[ERROR] Failed to marshal JSON result: %s", err.Error())
+	}
 }

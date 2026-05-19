@@ -110,3 +110,46 @@ func TestIndividualSim(t *testing.T) {
 
 	log.Printf("RESULT: %#v", rsr)
 }
+
+func TestRaidSimRequestFromIndividualSettings(t *testing.T) {
+	settings := &proto.IndividualSimSettings{
+		Settings: &proto.SimSettings{
+			Iterations:   123,
+			FixedRngSeed: 456,
+		},
+		RaidBuffs:  &proto.RaidBuffs{Bloodlust: true},
+		PartyBuffs: &proto.PartyBuffs{TrueshotAura: true},
+		Debuffs:    &proto.Debuffs{JudgementOfWisdom: true},
+		Player: &proto.Player{
+			Name:      "Example",
+			Race:      proto.Race_RaceTroll,
+			Class:     proto.Class_ClassShaman,
+			Equipment: p1Equip,
+			Spec:      basicSpec,
+		},
+		Encounter: &proto.Encounter{
+			Duration: 60,
+			Targets:  []*proto.Target{{Level: 73}},
+		},
+	}
+
+	req, err := raidSimRequestFromIndividualSettings(settings, 321, 654)
+	if err != nil {
+		t.Fatalf("raidSimRequestFromIndividualSettings failed: %v", err)
+	}
+	if req.Type != proto.SimType_SimTypeIndividual {
+		t.Fatalf("expected individual sim type, got %s", req.Type)
+	}
+	if req.SimOptions.Iterations != 321 {
+		t.Fatalf("expected iterations override, got %d", req.SimOptions.Iterations)
+	}
+	if req.SimOptions.RandomSeed != 654 {
+		t.Fatalf("expected random seed override, got %d", req.SimOptions.RandomSeed)
+	}
+	if req.Raid.Buffs != settings.RaidBuffs || req.Raid.Parties[0].Buffs != settings.PartyBuffs || req.Raid.Debuffs != settings.Debuffs {
+		t.Fatalf("expected buffs/debuffs from individual settings")
+	}
+	if req.Raid.Parties[0].Players[0] != settings.Player {
+		t.Fatalf("expected player from individual settings")
+	}
+}

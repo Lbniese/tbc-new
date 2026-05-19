@@ -1,0 +1,32 @@
+FROM golang:1.25-bookworm AS builder
+
+WORKDIR /src
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends make protobuf-compiler libprotobuf-dev ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+RUN mkdir -p binary_dist/tbc \
+	&& touch binary_dist/tbc/embedded \
+	&& cp sim/web/dist.go.tmpl binary_dist/dist.go \
+	&& protoc -I=/usr/include -I=./proto --go_out=./sim/core ./proto/*.proto
+RUN CGO_ENABLED=0 GOOS=linux go build --tags=with_db -ldflags="-s -w" -o /wowsimtbc ./sim/web
+
+FROM alpine:3.23.3
+
+RUN apk add --no-cache ca-certificates wget
+
+WORKDIR /app
+COPY --from=builder /wowsimtbc /app/wowsimtbc
+COPY --from=builder /src/ui /app/ui
+
+EXPOSE 3333
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s CMD wget -qO- http://127.0.0.1:3333/version || exit 1
+
+CMD ["/app/wowsimtbc", "--host=:3333", "--launch=false", "--usefs=true", "--nvc=true"]

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"slices"
+	"strings"
 
 	"github.com/wowsims/tbc/sim/core/proto"
 	"github.com/wowsims/tbc/sim/core/simsignals"
@@ -501,7 +502,8 @@ func runSimConcurrent(request *proto.RaidSimRequest, progress chan *proto.Progre
 				if progress != nil {
 					progress <- msg
 				}
-				log.Printf("Thread %d had an error. Cancelling all sims!", i)
+				errorMessage := strings.SplitN(msg.FinalRaidResult.Error.Message, "\n", 2)[0]
+				log.Printf("Thread %d had an error. Cancelling all sims: %s", i, errorMessage)
 				signals.Abort.Trigger()
 				return msg.FinalRaidResult
 			}
