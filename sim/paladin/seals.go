@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/wowsims/tbc/sim/core"
+	"github.com/wowsims/tbc/sim/core/proto"
 	"github.com/wowsims/tbc/sim/core/stats"
 )
 
@@ -225,25 +226,36 @@ func (paladin *Paladin) registerSealOfRighteousness(seal seal) {
 		},
 	})
 
-	damage := 1.2*(seal.proc.value*1.2*1.03*paladin.MainHand().SwingSpeed/100) + 0.03*(float64(paladin.MainHand().WeaponDamageMax)+float64(paladin.MainHand().WeaponDamageMin))/2 + 1
-
+	// Canonical Seal of Righteousness proc formula (Maintankadin / EJ, matches in-game testing):
+	//   1H: damage = (0.85 * SoRcoef * Speed) - (QualityModifier * Speed * 0.03) + (0.03 * AvgWeaponDmg) + (0.092 * Speed * SP)
+	//   2H: damage = (1.20 * SoRcoef * Speed) - (QualityModifier * Speed * 0.03) + (0.03 * AvgWeaponDmg) + (0.108 * Speed * SP)
+	sorCoef := seal.proc.value * 1.2 * 1.03 / 100
 	procSpell := paladin.RegisterSpell(core.SpellConfig{
 		ActionID:       core.ActionID{SpellID: seal.proc.spellID},
 		SpellSchool:    core.SpellSchoolHoly,
-		ProcMask:       core.ProcMaskMeleeMHSpecial,                             //changed to ProcMaskMeleeMHSpecial, to allow procs from weapons/oils which do proc from SoR, -- TODO: Verify in TBC
-		Flags:          core.SpellFlagMeleeMetrics | core.SpellFlagPassiveSpell, // | core.SpellFlagSuppressEquipProcs | core.SpellFlagBatchStartAttackMacro, // but Wild Strikes does not proc, nor equip procs
+		ProcMask:       core.ProcMaskMeleeMHSpecial,
+		Flags:          core.SpellFlagMeleeMetrics | core.SpellFlagPassiveSpell,
 		ClassSpellMask: SpellMaskSealOfRighteousness,
 
 		DamageMultiplier: 1,
 		ThreatMultiplier: 1,
-		BonusCoefficient: seal.proc.coeff,
 
 		ApplyEffects: func(sim *core.Simulation, target *core.Unit, spell *core.Spell) {
-			// effectively scales with coeff x 2, and damage dealt multipliers affect half the damage taken bonus -- TODO: Verify in TBC
-			// x := spell.Unit.PseudoStats.BonusDamage + spell.Unit.GetStat(stats.HolyDamage) + spell.Unit.GetStat(stats.SpellDamage) + spell.Unit.PseudoStats.MobTypeSpellDamage
-			// baseDamage := damage + spell.BonusCoefficient*(x+target.GetSchoolBonusDamageTaken(spell))
+			mh := paladin.MainHand()
 
-			result := spell.CalcDamage(sim, target, damage, spell.OutcomeAlwaysHit)
+			baseCoef := 0.85
+			spCoef := 0.092
+			if mh.HandType == proto.HandType_HandTypeTwoHand {
+				baseCoef = 1.2
+				spCoef = 0.108
+			}
+
+			speed := mh.SwingSpeed
+			spell.BonusCoefficient = spCoef * speed
+
+			avgWeaponDmg := paladin.AutoAttacks.MH().AverageDamage()
+			flatDamage := baseCoef*sorCoef*speed - mh.QualityModifier*speed*0.03 + 0.03*avgWeaponDmg
+			result := spell.CalcDamage(sim, target, flatDamage, spell.OutcomeAlwaysHit)
 
 			action := core.NewDelayedAction(core.DelayedActionOptions{
 				DoAt:     sim.CurrentTime + core.SpellBatchWindow,
