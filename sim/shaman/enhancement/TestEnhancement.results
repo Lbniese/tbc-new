@@ -167,8 +167,8 @@ dps_results: {
 dps_results: {
  key: "TestEnhancement-AllItems-BandoftheEternalSage-29305"
  value: {
-  dps: 1807.39107
-  tps: 1721.10441
+  dps: 1807.55278
+  tps: 1721.24615
  }
 }
 dps_results: {
@@ -239,6 +239,13 @@ dps_results: {
  value: {
   dps: 1865.18739
   tps: 1779.09918
+ }
+}
+dps_results: {
+ key: "TestEnhancement-AllItems-Biznicks247x128Accurascope-2523"
+ value: {
+  dps: 1851.02174
+  tps: 1765.42021
  }
 }
 dps_results: {
@@ -923,8 +930,8 @@ dps_results: {
 dps_results: {
  key: "TestEnhancement-AllItems-Quagmirran'sEye-27683"
  value: {
-  dps: 1801.84156
-  tps: 1717.24719
+  dps: 1805.32003
+  tps: 1720.90712
  }
 }
 dps_results: {
@@ -944,8 +951,8 @@ dps_results: {
 dps_results: {
  key: "TestEnhancement-AllItems-RobeoftheElderScribes-28602"
  value: {
-  dps: 1773.8863
-  tps: 1686.1889
+  dps: 1774.07283
+  tps: 1686.12923
  }
 }
 dps_results: {
@@ -1098,13 +1105,6 @@ dps_results: {
 }
 dps_results: {
  key: "TestEnhancement-AllItems-StabilitzedEterniumScope-2724"
- value: {
-  dps: 1851.02174
-  tps: 1765.42021
- }
-}
-dps_results: {
- key: "TestEnhancement-AllItems-StabilizedEterniumScope-2523"
  value: {
   dps: 1851.02174
   tps: 1765.42021
@@ -1337,8 +1337,8 @@ dps_results: {
 dps_results: {
  key: "TestEnhancement-AllItems-WrathofCenarius-21190"
  value: {
-  dps: 1805.63017
-  tps: 1718.98632
+  dps: 1806.37543
+  tps: 1719.43356
  }
 }
 dps_results: {
