@@ -111,7 +111,7 @@ export const DefaultPartyBuffs = PartyBuffs.create({
 	windfuryTotem: TristateEffect.TristateEffectImproved,
 	graceOfAirTotem: TristateEffect.TristateEffectImproved,
 	drums: Drums.LesserDrumsOfBattle,
-	sanctityAura: TristateEffect.TristateEffectImproved,
+	sanctityAura: TristateEffect.TristateEffectMissing,
 });
 
 export const DefaultIndividualBuffs = IndividualBuffs.create({
