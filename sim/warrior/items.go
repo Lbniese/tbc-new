@@ -180,12 +180,21 @@ var ItemSetDestroyerBattlegear = core.NewItemSet(core.ItemSet{
 
 			setBonusAura.
 				AttachProcTrigger(core.ProcTrigger{
-					Name:               "Destroyer Battlegear - 2PC",
-					ClassSpellMask:     SpellMaskOverpower,
-					TriggerImmediately: true,
-					Callback:           core.CallbackOnSpellHitDealt,
+					Name:           "Destroyer Battlegear - 2PC - Trigger",
+					ClassSpellMask: SpellMaskOverpower,
+					Callback:       core.CallbackOnSpellHitDealt,
 					Handler: func(sim *core.Simulation, spell *core.Spell, result *core.SpellResult) {
 						aura.Activate(sim)
+					},
+				}).
+				AttachProcTrigger(core.ProcTrigger{
+					Name:               "Destroyer Battlegear - 2PC - Consume",
+					ProcMask:           core.ProcMaskMeleeSpecial,
+					Callback:           core.CallbackOnSpellHitDealt,
+					Outcome:            core.OutcomeLanded,
+					TriggerImmediately: true,
+					Handler: func(sim *core.Simulation, spell *core.Spell, result *core.SpellResult) {
+						aura.Deactivate(sim)
 					},
 				}).
 				ExposeToAPL(37528)
