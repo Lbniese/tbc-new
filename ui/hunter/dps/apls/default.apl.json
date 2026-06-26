@@ -313,10 +313,17 @@
 													}
 												},
 												{
-													"cmp": {
-														"op": "OpGt",
-														"lhs": { "autoTimeSinceLast": { "autoType": "MeleeAuto" } },
-														"rhs": { "autoSwingTime": { "autoType": "MainHand" } }
+													"and": {
+														"vals": [
+															{
+																"cmp": {
+																	"op": "OpGt",
+																	"lhs": { "autoTimeSinceLast": { "autoType": "MeleeAuto" } },
+																	"rhs": { "autoSwingTime": { "autoType": "MainHand" } }
+																}
+															},
+															{ "cmp": { "op": "OpGe", "lhs": { "autoTimeToNext": { "autoType": "RangedAuto" } }, "rhs": { "variableRef": { "name": "Move duration" } } } }
+														]
 													}
 												}
 											]
