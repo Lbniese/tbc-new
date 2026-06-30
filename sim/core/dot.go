@@ -270,17 +270,25 @@ func (dot *Dot) periodicTick(sim *Simulation) {
 		// Note: even if the clip delay is 0ms, need a WaitUntil so that APL is called after the channel aura fades.
 		if dot.remainingTicks == 0 && dot.Spell.Unit.GCD.IsReady(sim) {
 			dot.Spell.Unit.WaitUntil(sim, sim.CurrentTime+channelDelay)
-		} else if dot.Spell.Unit.Rotation.shouldInterruptChannel(sim) &&
-			(dot.Spell.Unit.GCD.IsReady(sim) || dot.Spell.Unit.GCD.TimeToReady(sim) > MaxSpellQueueWindow) {
-			// Skip interrupts that are purely SQW-triggered (GCD within queue window but not
-			// actually ready). Those are handled by the rotation action at actual GCD time.
-			dot.tickAction.NextActionAt = NeverExpires // don't tick again in ApplyOnExpire
-			dot.Deactivate(sim)
-			if dot.Spell.Unit.GCD.IsReady(sim) {
-				dot.Spell.Unit.WaitUntil(sim, sim.CurrentTime+channelDelay)
-			}
+		} else {
+			// Increment evalGeneration so variable refs re-evaluate with current game state,
+			// not the cached values from the last DoNextAction loop iteration.
+			dot.Spell.Unit.Rotation.evalGeneration++
+			if dot.Spell.Unit.Rotation.shouldInterruptChannel(sim) &&
+				// Skip interrupts that are purely SQW-triggered (GCD within queue window but not
+				// actually ready). Those are handled by the rotation action at actual GCD time.
+				// Only interrupt when GCD is ready OR the condition is unrelated to GCD queuing.
+				(dot.Spell.Unit.GCD.IsReady(sim) || dot.Spell.Unit.GCD.TimeToReady(sim) > MaxSpellQueueWindow) {
+				// Skip interrupts that are purely SQW-triggered (GCD within queue window but not
+				// actually ready). Those are handled by the rotation action at actual GCD time.
+				dot.tickAction.NextActionAt = NeverExpires // don't tick again in ApplyOnExpire
+				dot.Deactivate(sim)
+				if dot.Spell.Unit.GCD.IsReady(sim) {
+					dot.Spell.Unit.WaitUntil(sim, sim.CurrentTime+channelDelay)
+				}
 
-			return // don't schedule another tick
+				return // don't schedule another tick
+			}
 		}
 	}
 
