@@ -171,19 +171,28 @@ var ItemSetDestroyerBattlegear = core.NewItemSet(core.ItemSet{
 			warrior := agent.(WarriorAgent).GetWarrior()
 			actionID := core.ActionID{SpellID: 37529}
 
-			aura := warrior.NewTemporaryStatsAura(
+			var aura *core.Aura
+			aura = warrior.NewTemporaryStatsAura(
 				"Overpower",
 				actionID,
 				stats.Stats{stats.AttackPower: 100},
 				time.Second*5,
-			)
+			).AttachProcTrigger(core.ProcTrigger{
+				Name:               "Destroyer Battlegear - 2PC - Consume",
+				ProcMask:           core.ProcMaskMeleeSpecial,
+				Callback:           core.CallbackOnSpellHitDealt,
+				Outcome:            core.OutcomeLanded,
+				TriggerImmediately: true,
+				Handler: func(sim *core.Simulation, spell *core.Spell, result *core.SpellResult) {
+					aura.Deactivate(sim)
+				},
+			})
 
 			setBonusAura.
 				AttachProcTrigger(core.ProcTrigger{
-					Name:               "Destroyer Battlegear - 2PC",
-					ClassSpellMask:     SpellMaskOverpower,
-					TriggerImmediately: true,
-					Callback:           core.CallbackOnSpellHitDealt,
+					Name:           "Destroyer Battlegear - 2PC - Trigger",
+					ClassSpellMask: SpellMaskOverpower,
+					Callback:       core.CallbackOnSpellHitDealt,
 					Handler: func(sim *core.Simulation, spell *core.Spell, result *core.SpellResult) {
 						aura.Activate(sim)
 					},
@@ -316,11 +325,50 @@ func init() {
 	// Empty function to remove the warning from the UI
 	// because this effect has been implemented in buffs.go
 	core.NewItemEffect(30446, func(agent core.Agent) {})
+
+	for _, itemID := range pvpGloveItemIDs {
+		core.NewItemEffect(itemID, func(_ core.Agent) {})
+	}
+
+	// Ashtongue Talisman of Valor
+	core.NewItemEffect(32485, func(agent core.Agent) {
+		character := agent.GetCharacter()
+		duration := time.Second * 12
+		value := 55.0
+		actionID := core.ActionID{SpellID: 40459}
+		healthMetrics := character.NewHealthMetrics(actionID)
+
+		aura := character.NewTemporaryStatsAura(
+			"Ashtongue Talisman of Valor - Proc",
+			actionID,
+			stats.Stats{stats.Strength: value},
+			duration,
+		)
+
+		procAura := character.MakeProcTriggerAura(core.ProcTrigger{
+			Name:           "Ashtongue Talisman of Valor - Trigger",
+			ActionID:       core.ActionID{ItemID: 32485},
+			ProcChance:     0.25,
+			ClassSpellMask: SpellMaskBloodthirst | SpellMaskMortalStrike | SpellMaskShieldSlam,
+			Outcome:        core.OutcomeLanded,
+			Callback:       core.CallbackOnSpellHitDealt,
+			Handler: func(sim *core.Simulation, spell *core.Spell, result *core.SpellResult) {
+				aura.Activate(sim)
+				character.GainHealth(sim, 330, healthMetrics)
+			},
+		})
+
+		eligibleSlots := character.ItemSwap.EligibleSlotsForItem(32485)
+		character.AddStatProcBuff(32485, aura, false, eligibleSlots)
+		character.ItemSwap.RegisterProc(32485, procAura)
+	})
 }
+
+var pvpGloveItemIDs = []int32{24549, 28700, 28852, 30487, 32164, 33729, 35408, 35067}
 
 func (warrior *Warrior) addPvpGloves() {
 	warrior.RegisterPvPGloveMod(
-		[]int32{24549, 28700, 28852, 30487, 32164, 33729, 35408, 35067},
+		pvpGloveItemIDs,
 		core.SpellModConfig{
 			Kind:      core.SpellMod_PowerCost_Flat,
 			ClassMask: SpellMaskHamstring,

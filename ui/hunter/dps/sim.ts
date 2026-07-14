@@ -42,9 +42,12 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecHunter, {
 	displayStats: UnitStat.createDisplayStatArray(
 		[
 			Stat.StatHealth,
+			Stat.StatMana,
 			Stat.StatStamina,
 			Stat.StatStrength,
 			Stat.StatAgility,
+			Stat.StatIntellect,
+			Stat.StatMP5,
 			Stat.StatAttackPower,
 			Stat.StatRangedAttackPower,
 			Stat.StatExpertiseRating,
@@ -62,7 +65,7 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecHunter, {
 	itemSwapSlots: [ItemSlot.ItemSlotMainHand, ItemSlot.ItemSlotOffHand, ItemSlot.ItemSlotRanged, ItemSlot.ItemSlotTrinket1, ItemSlot.ItemSlotTrinket2],
 	defaults: {
 		// Default equipped gear.
-		gear: Presets.P1_BM_2H_6P_GEARSET.gear,
+		gear: Presets.P2_BM_2H_6P_GEARSET.gear,
 		// Default EP weights for sorting gear in the gear picker.
 		epWeights: Presets.P1_BM_EP_PRESET.epWeights,
 		softCapBreakpoints: [
@@ -91,7 +94,7 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecHunter, {
 	// IconInputs to include in the 'Player' section on the settings tab.
 	playerIconInputs: [HunterInputs.PetTypeInput(), HunterInputs.QuiverInput(), HunterInputs.AmmoInput()],
 	// Buff and Debuff inputs to include/exclude, overriding the EP-based defaults.
-	includeBuffDebuffInputs: [Stat.StatSpirit, Stat.StatSpellCritRating],
+	includeBuffDebuffInputs: [Stat.StatSpirit, Stat.StatSpellCritRating, Stat.StatSpellDamage],
 	excludeBuffDebuffInputs: [],
 	rotationInputs: HunterInputs.RotationInputs,
 	// Inputs to include in the 'Other' section on the settings tab.

@@ -1,3 +1,4 @@
+import i18n from '../i18n/config';
 import { CharacterStats } from './components/character_stats';
 import { CONJURED_CONFIG } from './components/inputs/consumables';
 import { relevantStatOptions } from './components/inputs/stat_options';
@@ -69,7 +70,9 @@ import {
 	getMetaGemEffectEP,
 	getTalentTreePoints,
 	isPVPItem,
+	migrateOldProto,
 	newUnitReference,
+	ProtoConversionMap,
 	raceToFaction,
 	SpecClasses,
 	SpecOptions,
@@ -704,6 +707,15 @@ export class Player<SpecType extends Spec> {
 	setGear(eventID: EventID, newGear: Gear, forceUpdate?: boolean) {
 		if (newGear.equals(this.gear) && !forceUpdate) return;
 		this.gear = newGear;
+
+		// Adjust weapon stone imbues before emitting, so that any gearChangeEmitter listener
+		// (including pickers that auto-clear now-invalid selections) sees the corrected value.
+		const adjustedConsumes = this.gear.adjustImbues(this.consumables);
+		if (adjustedConsumes !== this.consumables) {
+			this.consumables = adjustedConsumes;
+			this.consumesChangeEmitter.emit(eventID);
+		}
+
 		this.gearChangeEmitter.emit(eventID);
 	}
 
@@ -749,6 +761,48 @@ export class Player<SpecType extends Spec> {
 		return this.getCritImmunityInfo().delta;
 	}
 
+	getMissChanceInfo() {
+		const defense = this.currentStats.finalStats?.stats[Stat.StatDefenseRating] || 0;
+		const defenseContribution = Math.floor(defense / Mechanics.DEFENSE_RATING_PER_DEFENSE_LEVEL) * Mechanics.MISS_DODGE_PARRY_BLOCK_CRIT_CHANCE_PER_DEFENSE;
+		let debuffs = 0;
+		if (this.raid?.getDebuffs().scorpidSting) {
+			debuffs = 5;
+		} else if (this.raid?.getDebuffs().insectSwarm) {
+			debuffs = 2;
+		}
+
+		return {
+			base: 5,
+			defense: defenseContribution,
+			debuffs,
+			total: 5 + defenseContribution + debuffs,
+		};
+	}
+
+	getAvoidanceInfo() {
+		const miss = this.getMissChanceInfo().total;
+		const dodge = this.currentStats.finalStats?.pseudoStats[PseudoStat.PseudoStatDodgePercent] || 0;
+		const parry = this.currentStats.finalStats?.pseudoStats[PseudoStat.PseudoStatParryPercent] || 0;
+		let block = this.currentStats.finalStats?.pseudoStats[PseudoStat.PseudoStatBlockPercent] || 0;
+
+		if (this.isSpec(Spec.SpecProtectionPaladin)) {
+			block += 30;
+
+			if (this.getEquippedItem(ItemSlot.ItemSlotRanged)?.id === 29388) {
+				block += 42 / Mechanics.BLOCK_RATING_PER_BLOCK_PERCENT;
+			}
+		}
+
+		return {
+			miss: miss,
+			dodge: dodge,
+			parry: parry,
+			block: block,
+			total: miss + dodge + parry + block,
+			shear: dodge + parry + block,
+		};
+	}
+
 	getMeleeCritCapInfo(): MeleeCritCapInfo {
 		const debuffStats = CharacterStats.getDebuffStats(this);
 		const debuffHit = debuffStats.getPseudoStat(PseudoStat.PseudoStatMeleeHitPercent) || 0;
@@ -757,18 +811,18 @@ export class Player<SpecType extends Spec> {
 		const meleeCrit = (this.currentStats.finalStats?.pseudoStats[PseudoStat.PseudoStatMeleeCritPercent] || 0) + debuffCrit;
 		const meleeHit = (this.currentStats.finalStats?.pseudoStats[PseudoStat.PseudoStatMeleeHitPercent] || 0) + debuffHit;
 		const expertise = (this.currentStats.finalStats?.stats[Stat.StatExpertiseRating] || 0) / Mechanics.EXPERTISE_PER_QUARTER_PERCENT_REDUCTION / 4;
-		const critSuppression = [0, 1, 2, 4.8][this.sim.encounter.primaryTarget.level - Mechanics.CHARACTER_LEVEL];
-		const hitSuppression = [0, 0, 0, 1][this.sim.encounter.primaryTarget.level - Mechanics.CHARACTER_LEVEL];
-		const glancing = [6, 12, 18, 24][this.sim.encounter.primaryTarget.level - Mechanics.CHARACTER_LEVEL];
-		const oneHandHitCap = [5, 6, 7, 8][this.sim.encounter.primaryTarget.level - Mechanics.CHARACTER_LEVEL] + hitSuppression;
+		const critSuppression = { 68: 0, 70: 0, 71: 1, 72: 2, 73: 4.8 }[this.sim.encounter.primaryTarget.level] ?? 0;
+		const hitSuppression = { 68: 0, 70: 0, 71: 0, 72: 0, 73: 1 }[this.sim.encounter.primaryTarget.level] ?? 0;
+		const glancing = { 68: 0, 70: 6, 71: 12, 72: 18, 73: 24 }[this.sim.encounter.primaryTarget.level] ?? 0;
+
+		let oneHandHitCap = ({ 68: 4, 70: 5, 71: 6, 72: 7, 73: 8 }[this.sim.encounter.primaryTarget.level] ?? 4) + hitSuppression;
 		// DW Penalty is a fixed 19%
 		const dualWieldHitCap = oneHandHitCap + 19;
-
 		const hasOffhandWeapon = this.getGear().getEquippedItem(ItemSlot.ItemSlotOffHand)?.item.weaponSpeed !== undefined;
 		// Due to warrior HS bug, hit cap for crit cap calculation should be 8% instead of 27%
 		const meleeHitCap = hasOffhandWeapon && this.getClass() != Class.ClassWarrior ? dualWieldHitCap : oneHandHitCap;
-		const dodgeCap = [5, 5.5, 6, 6.5][this.sim.encounter.primaryTarget.level - Mechanics.CHARACTER_LEVEL];
-		const parryCap = this.getInFrontOfTarget() ? [5, 5.5, 6, 14][this.sim.encounter.primaryTarget.level - Mechanics.CHARACTER_LEVEL] : 0;
+		const dodgeCap = { 68: 4, 70: 5, 71: 5.5, 72: 6, 73: 6.5 }[this.sim.encounter.primaryTarget.level] ?? 4;
+		const parryCap = this.getInFrontOfTarget() ? ({ 68: 4, 70: 5, 71: 5.5, 72: 6, 73: 14 }[this.sim.encounter.primaryTarget.level] ?? 4) : 0;
 		const expertiseCap = dodgeCap + parryCap;
 
 		const remainingMeleeHitCap = Math.max(meleeHitCap - meleeHit, 0.0);
@@ -1386,6 +1440,7 @@ export class Player<SpecType extends Spec> {
 		const aplRotation = forSimming ? this.getResolvedAplRotation(forSimming) : omitDeep(this.aplRotation, ['uuid']);
 
 		let player = PlayerProto.create({
+			apiVersion: CURRENT_API_VERSION,
 			class: this.getClass(),
 			database: forExport ? undefined : this.toDatabase(),
 		});
@@ -1521,6 +1576,53 @@ export class Player<SpecType extends Spec> {
 		if (!(playerProto.apiVersion < CURRENT_API_VERSION)) {
 			return;
 		}
+
+		const conversionMap: ProtoConversionMap<PlayerProto> = new Map([
+			[
+				12,
+				(oldProto: PlayerProto) => {
+					oldProto.apiVersion = 13;
+
+					// v12: ret paladin useConsecrate(bool) → consecrationRank(int32).
+					if (playerProto.spec?.oneofKind === 'retributionPaladin') {
+						const jsonStr = playerProto.rotation?.simple?.specRotationJson;
+						if (jsonStr) {
+							try {
+								const parsed = JSON.parse(jsonStr);
+
+								if (!parsed.aura) {
+									parsed.aura = 'SanctityAura';
+								}
+
+								if (parsed.useConsecrate) {
+									parsed.consecrationRank = 6;
+								}
+
+								delete parsed.useConsecrate;
+
+								playerProto.rotation!.simple!.specRotationJson = JSON.stringify(parsed);
+
+								new Toast({
+									delay: 8000,
+									variant: 'info',
+									body: <>{i18n.t('protoVersion.12.body', { ns: 'updates' })}</>,
+								});
+							} catch {
+								// Malformed JSON — nothing to migrate.
+							}
+						}
+					}
+
+					return oldProto;
+				},
+			],
+		]);
+
+		// Run the migration utility using the above map.
+		migrateOldProto<PlayerProto>(playerProto, playerProto.apiVersion, conversionMap);
+
+		// Flag the version as up-to-date once all migrations are done.
+		playerProto.apiVersion = CURRENT_API_VERSION;
 	}
 
 	getSpecConfig(): IndividualSimUIConfig<SpecType> {

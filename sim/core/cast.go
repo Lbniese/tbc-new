@@ -15,11 +15,13 @@ import (
 type OnCastComplete func(aura *Aura, sim *Simulation, spell *Spell)
 
 type Hardcast struct {
-	Expires    time.Duration
-	ActionID   ActionID
-	OnComplete func(*Simulation, *Unit)
-	Target     *Unit
-	CanMove    bool
+	Expires     time.Duration
+	ActionID    ActionID
+	OnComplete  func(*Simulation, *Unit)
+	Target      *Unit
+	CanMove     bool
+	IsChanneled bool
+	CastTime    time.Duration
 }
 
 // Input for constructing the CastSpell function for a spell.
@@ -163,10 +165,11 @@ func (spell *Spell) makeCastFunc(config CastConfig) CastSuccessFunc {
 			return spell.castFailureHelper(sim, "casting/channeling while moving not allowed!")
 		}
 
+		isChanneled := spell.Flags.Matches(SpellFlagChanneled)
 		if effectiveTime := spell.CurCast.EffectiveTime(); effectiveTime != 0 {
 			// do not add channeled time here as they have variable cast length
 			// cast time for channels is handled in dot.OnExpire
-			if !spell.Flags.Matches(SpellFlagChanneled) {
+			if !isChanneled {
 				spell.SpellMetrics[target.UnitIndex].TotalCastTime += effectiveTime
 			}
 
@@ -187,6 +190,8 @@ func (spell *Spell) makeCastFunc(config CastConfig) CastSuccessFunc {
 					if sim.Log != nil && !spell.Flags.Matches(SpellFlagNoLogs) {
 						spell.Unit.Log(sim, "Completed cast %s", spell.ActionID)
 					}
+
+					spell.Unit.HardcastAvoidanceAura.Deactivate(sim)
 
 					if !spell.CanCompleteCast(sim, target, true) {
 						return
@@ -213,9 +218,15 @@ func (spell *Spell) makeCastFunc(config CastConfig) CastSuccessFunc {
 					if !spell.Flags.Matches(SpellFlagNoOnCastComplete) {
 						spell.Unit.OnCastComplete(sim, spell)
 					}
+
+					// A hardcast shorter than the GCD leaves a weaver free to move
+					// before the GCD frees; wake the rotation to land a pending swing.
+					spell.Unit.AutoAttacks.weaveWakeupAfterCast(sim)
 				},
-				Target:  target,
-				CanMove: spell.Flags&SpellFlagCanCastWhileMoving > 0,
+				Target:      target,
+				CanMove:     spell.Flags&SpellFlagCanCastWhileMoving > 0,
+				IsChanneled: isChanneled,
+				CastTime:    spell.CurCast.CastTime,
 			}
 
 			spell.Unit.newHardcastAction(sim)
